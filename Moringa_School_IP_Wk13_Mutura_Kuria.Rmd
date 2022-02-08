@@ -1,0 +1,457 @@
+---
+title: "Moringa_School_IP_Wk13_Mutura_Kuria"
+author: "Mutura Kuria"
+date: "1/29/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+# Loading Libraries necessary
+
+library(tidyverse)
+library(magrittr)
+library(warn = -1)
+
+library(RColorBrewer)
+library(ggplot2)
+library(lattice)
+library(corrplot)
+
+library(DataExplorer)
+library(Hmisc)
+library(pastecs)
+library(psych)
+library(factoextra)
+library(Rtsne)
+library(caret)
+```
+
+# 1. Problem Definition
+
+Kira Plastinina is a Russian brand that is sold through a defunct chain of retail stores in Russia, Ukraine, Kazakhstan, Belarus, China, Philippines, and Armenia. The brand’s Sales and Marketing team would like to understand their customer’s behavior from data that they have collected over the past year. More specifically, they would like to learn the characteristics of customer groups.
+
+ -Perform clustering stating insights drawn from your analysis and visualizations.
+ -Upon implementation, provide comparisons between the approaches learned this week i.e. K-Means clustering vs Hierarchical clustering highlighting the strengths and limitations of each approach in the context of your analysis. 
+ 
+ 
+# 2. Data Sourcing
+
+  - The data is sourced from this link (http://bit.ly/EcommerceCustomersDataset)
+
+## 2.1 Loading the dataset
+  
+```{r}
+#Loading the data
+df <-read.csv("http://bit.ly/EcommerceCustomersDataset", header = TRUE)
+#Showing head of data
+head(df)
+```
+# 3. Check the Data
+```{r}
+#Checking for dimensions and class types
+str(df)
+```
+
+```{r}
+summary((df))
+```
+
+ -The dataset consists of 10 numerical and 8 categorical attributes. The 'Revenue' attribute can be used as the class label.
+ -Data has 12330 observations(rows) and 18 variables(columns) We have integers, numerics , character and logical features in our dataset.
+ 
+
+
+# 4. Perform Data Cleaning
+
+```{r}
+# conversion from just a raw dataset to a dataframe
+df = as.data.frame(df)
+
+# Cleaning column names, by making them uniform
+colnames(df) = tolower(colnames(df))
+```
+## 4.1.1 Duplicated values
+
+```{r}
+#Checking for duplicated rows
+duplicated_rows <- df[duplicated(df),]
+dim(duplicated_rows)
+```
+```{r}
+#Dropping duplicated rows
+df <- df[!duplicated(df), ]
+dim(df)
+```
+## 4.1.2 Missing Values
+
+```{r}
+# Checking for Missing Values
+
+colSums(is.na(df))
+
+```
+
+
+
+```{r}
+# Filling the missing values using the mutate function and pipe operator
+# Each column will be filled with its own mean
+
+df  = df %>%
+
+    mutate(administrative =replace(administrative,is.na(administrative),mean(administrative,na.rm=TRUE)))%>%
+    mutate(administrative_duration =replace(administrative_duration,is.na(administrative_duration),mean(administrative_duration,na.rm=TRUE)))%>%
+    mutate(informational = replace(informational, is.na(informational), mean(informational, na.rm = TRUE)))%>%
+    mutate(informational_duration =replace(informational_duration,is.na(informational_duration),mean(informational_duration,na.rm=TRUE)))%>%
+    mutate(productrelated =replace(productrelated,is.na(productrelated),mean(productrelated,na.rm=TRUE)))%>%
+    mutate(productrelated_duration = replace(productrelated_duration, is.na(productrelated_duration), mean(productrelated_duration, na.rm = TRUE)))%>%
+    mutate(bouncerates =replace(bouncerates, is.na(bouncerates),mean(bouncerates,na.rm=TRUE)))%>%
+    mutate(exitrates = replace(exitrates, is.na(exitrates), mean(exitrates, na.rm = TRUE)))
+
+   
+```
+
+```{r}
+colSums(is.na(df))
+```
+All missing values have been filled
+
+
+```{r}
+cat_cols = c('month', 'operatingsystems',   'browser',  'region',   'traffictype', 'visitortype')
+
+# Changing columns to factors
+df[,cat_cols] %<>% lapply(function(x) as.factor(as.character(x)))
+str(df)
+```
+
+```{r}
+#Checking for outliers 
+# Creating separate boxplots for each attribute
+par(mfrow=c(3,4))
+for(i in 1:10) {
+	boxplot(df[,i], main=names(df)[i], col = "green")}
+```
+There are outliers on almost all the columns. The outliers are a reflection of the kind of data that is the retail clients data and therefore its normal
+
+
+# 5. Perform Exploratory Data Analysis  (Univariate, Bivariate & Multivariate)
+
+## 5.1 Univariate Analysis
+### 5.1.1 Measures of central tendancy(Mean, Median, Mode), dispersion (Min, Max, Range, Quartiles, Variance, Standard deviation), others(Skewness, Kurtosis)
+
+```{r}
+#Lets select the numeric variables
+nums <- subset(df, select = -c(specialday, month, operatingsystems,browser, region, traffictype, visitortype,weekend,revenue))
+head(nums)
+```
+```{r}
+install.packages("pastecs")
+library(pastecs)
+```
+
+
+```{r}
+# Using the pastecs library we summeraze all the numeric variables we separated above
+stat.desc(nums)
+```
+```{r}
+install.packages("Hmisc")
+library(Hmisc)
+```
+
+```{r}
+# Using the describe() function which is part of the Hmisc package displays the following additional statistics: like skewness and kurtosis
+describe(nums)
+
+```
+
+### 5.2 Visualizations
+
+```{r}
+# Plotting a histogram using ggplots 
+# 
+#
+
+df %>%
+    ggplot(aes(productrelated)) +
+    geom_histogram(color = "Green",fill = "yellow") +
+    geom_vline(xintercept = mean(df$productrelated), lwd = 2) +
+    labs(title = "Distribution of Product Related",
+         x = "Product Related",
+         y = "Frequency")
+```
+Product Related is skewed to the right probably because of the outlies we saw earlier. Making it a good case to investigate further.
+
+```{r}
+# Histogram of Exit Rates
+
+hist(df$exitrates,
+     main = "Histogram of Exit Rates",
+     xlab = "Exit Rates",
+     col = "Green")
+```
+Another distribution that is right skewed
+
+```{r}
+#Plotting histograms to show distribution of variables 
+par(mfrow = c(2, 2))
+hist(nums$administrative,col = "Green")
+hist(nums$informational, col = "Yellow")
+hist(nums$bouncerates,col = "Red")
+hist(nums$exitrates,col = "Purple")
+```
+Most distributions are skewed towards the right. 
+
+```{r}
+par(mfrow = c(2, 2))
+hist(nums$administrative_duration, ,col = "Orange")
+hist(nums$informational_duration,col = "Black")
+hist(nums$productrelated_duration,col = "Pink")
+hist(nums$pagevalues,col = "Blue")
+```
+  -All have 12199 rows
+  -Product related duration have the largest figures and range, meaning people visiting the website spend alot of time in the product related page 
+  -People also spend a considerable amount of time checking on the administration 
+  -People spend the least of time checking out the information related page
+```{r}
+#install.packages("ggpubr")
+library(ggpubr)
+```
+
+```{r}
+#Traffic vs revenue?
+r <- ggplot(data = df) +
+  geom_bar(mapping = aes(x = revenue))
+#Weekend traffic
+w <- ggplot(data = df) +
+  geom_bar(mapping = aes(x = weekend))
+#Who frequented the website?
+v <-ggplot(data = df) +
+  geom_bar(mapping = aes(x = visitortype))
+#Traffic type 
+t <- ggplot(data = df) +
+  geom_bar(mapping = aes(x = traffictype))
+ggarrange(r, w, v, t + rremove("x.text"), 
+          ncol = 2, nrow = 2)
+```
+  - Most clicks did not generate revenue
+  - Weekday visitors were many than weekend
+  - Most visitors are returning
+
+
+
+## 5.2 Bivariate Analysis
+
+```{r}
+# Plotting a scatter plot using the plot() method
+
+plot(exitrates ~ bouncerates, dat = df, 
+      col = "Blue",
+      main = "Bounce vs Exit Rates Scatter Plot")
+```
+   -There exists strong positive correlation between Exit rates and Bounce rates.
+   
+```{r}
+#Revenue generation per month
+df %>% 
+  ggplot() +
+  aes(x = month, revenue = ..count../nrow(df), fill = revenue) +
+  geom_bar() +
+  ylab("Frequency")
+```
+```{r}
+# Scatter Plot using ggplots to find realtionship between two variables 
+# and their association with a categorical variable
+
+ggplot(df, aes(x=bouncerates, y=exitrates, shape= month, color= month, size= month)) +
+  geom_point()+
+  labs(title = "Bounce vs Exit Rates By Month Scatter Plot")
+```
+  -For only 6 months bounce and exit rates in the month of December is quite high.
+
+```{r}
+#Checking the distribution of different variables in relation to revenue
+options(repr.plot.width = 11, repr.plot.height = 5)
+p1 = ggplot(df, aes(productrelated, col = revenue)) + 
+  geom_density(aes(fill = revenue), alpha = 0.4) + 
+  labs(x = 'Product related', y = 'Density', title = '') + 
+  theme(legend.position = 'none', 
+       plot.title = element_text(size = 12)) 
+
+p2 = ggplot(df, aes(bouncerates, col = revenue)) + 
+  geom_density(aes(fill = revenue), alpha = 0.4) + 
+  labs(x = 'Bouncerates', y = '', title = '') + 
+  theme(legend.position = 'top') 
+
+p3 = ggplot(df, aes(exitrates, col = revenue)) + 
+  geom_density(aes(fill = revenue), alpha = 0.4) + 
+  labs(x = 'exitrates', y = '', title = '') + 
+  theme(legend.position = 'none', 
+       plot.title = element_text(size = 12)) 
+
+
+p4 = ggplot(df, aes(informational, col = revenue)) + 
+  geom_density(aes(fill = revenue), alpha = 0.4) + 
+  labs(x = 'informational', y = '', title = '') + 
+  theme(legend.position = 'none', 
+       plot.title = element_text(size = 12)) 
+
+
+ggarrange(p1, p2, p3, p4 + rremove("x.text"), 
+          ncol = 2, nrow = 2)
+```
+```{r}
+install.packages("corrplot")
+library(corrplot)
+```
+```{r}
+#Get the correlation matrix
+res = cor(nums)
+#Plotting a correlation plot
+
+corrplot(res, method="color",addCoef.col = "black", 
+         tl.col="black", tl.srt=45) 
+```
+   -there exists a strong positive relationship between a page and its respective duration for example Product Related page and Product Related Duration
+   
+   
+# 6. Implement the Solution
+
+## 6.1 Feature Engineering
+```{r}
+install.packages("caret")
+library(caret)
+```
+
+```{r}
+# # One hot encoding our factor variables.
+
+dmy = dummyVars(" ~ .", data = df)
+
+df2 = data.frame(predict(dmy, newdata = df))
+```
+
+
+```{r}
+# Confirming data types of each attribute
+sapply(df2, class)
+```
+
+
+```{r}
+
+# Removing revenue and storing it in a different variable
+
+df3 <- df2[, -c(30:31)]
+df.rev<- df[, "revenue"]
+
+df4 <- df2[, -c(30,31)]
+```
+
+
+```{r}
+# Previewing the copy dataset with dummies
+head(df4)
+```
+
+
+```{r}
+# Previewing the copy dataset with dummies
+head(df.rev)
+
+```
+
+
+```{r}
+#Now we need to scale our data to give them equal chances on the clustering algorithm
+df4_scaled <- scale(df4)
+summary(df4_scaled)
+```
+
+
+```{r}
+# Normalizing the the original data
+
+df_normal <- as.data.frame(apply(df4, 2, function(x) (x - min(x))/(max(x)-min(x))))
+
+summary(df_normal)
+```
+   -We will now use the normalized data for clustering
+   
+```{r}
+install.packages("factoextra")
+library(factoextra)
+```
+   
+   
+```{r}
+# Using the Elbow method to search for optimal number of clusters
+
+fviz_nbclust(df_normal, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+```
+
+## 6.2  K-Means Clustering
+
+
+```{r}
+# Applying K-Means  Clustering algorithm 
+
+df.clusters <- kmeans(df_normal, 10)
+
+df.clusters$size
+```
+
+```{r}
+# Product Related, vs Product Related Duration ploted to see how datapoints hace been distributed within the clusters
+
+plot(df_normal[, 5:6], col = df.clusters$cluster)
+```
+```{r}
+# Product Related, vs Product Related Duration
+
+plot(df_normal[, 7:8], col = df.clusters$cluster)
+```
+
+## 6.3 Hierachical Clustering
+```{r}
+
+# For hierarchical clustering, we use the dist() to compute the Euclidean distance btwn obs and d will be the first argument in the hclust() dissimilairty matrix
+ 
+
+d <- dist(df_normal, method = "euclidean")
+
+# We then apply hierarchical clustering using the Ward's method
+
+res.hc <- hclust(d, method = "complete")
+
+# Lastly we plot the obtained dendrogram
+#--
+
+plot(res.hc, cex = 0.6, hang = -1)
+```
+
+
+
+### 6.3 Principal Component Analysis (PCA)
+
+```{r}
+# Applying PCA
+# We pass df_norm to the prcomp().
+# We also set two arguments, center and scale, 
+# to be TRUE then preview our object with summary
+df_pca <- prcomp(df_normal,center = TRUE, scale = FALSE) 
+summary(df_pca)
+```
+
+  -We get 75 principle components. We can compare this with t-SNE results 
+
+  
+## Conclusion
+
+  - Kira Plastinina marketers should use the K Means clustering for Customer Segmentation since the clusters are clearer.
